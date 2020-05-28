@@ -8,18 +8,96 @@ output:
 
 ## Loading and preprocessing the data
 
+Read data directly from the zip file. Convert date string to proper `Date`.
+
+```{r readFile}
+activity <- read.csv(unz("activity.zip", "activity.csv"),
+                       stringsAsFactors = FALSE)
+activity$date <- as.Date(activity$date, "%Y-%m-%d")
+activity$hourInterval <- activity$interval %/% 100 + (activity$interval %% 100) / 60
+```
 
 
 ## What is mean total number of steps taken per day?
 
+```{r meanSteps}
+totalSteps <- tapply(activity$steps, activity$date, sum, na.rm = TRUE)
+meanSteps <- mean(totalSteps)
+medianSteps <- median(totalSteps)
+
+hist(totalSteps,
+     main = "Histogram of Total Steps per Day",
+     xlab = "total steps",
+     breaks = seq(0, 25000, 2500))
+```
+
+Mean number of steps per day: `r meanSteps`  
+Median number of steps per day: `r medianSteps`
 
 
 ## What is the average daily activity pattern?
 
+```{r dailyPattern}
+intervalMeanSteps <- tapply(activity$steps, activity$hourInterval, mean, na.rm = TRUE)
+maxInterval <- activity$interval[which.max(intervalMeanSteps)]
+
+plot(intervalMeanSteps ~ names(intervalMeanSteps),
+     type = "l",
+     main = "Mean Number of Steps during the Day",
+     xlab = "hour of the day",
+     xaxp = c(0, 24, 6),
+     ylab = "mean nr of steps")
+```
+
+The interval with (on average) maximum number of steps: `r maxInterval`.
 
 
 ## Imputing missing values
 
+There are `r sum(is.na(activity$steps))` NA values for steps.
+
+```{r impute}
+imputed <- activity
+naIndex <- which(is.na(imputed$steps))
+for (i in naIndex) {
+    imputed$steps[i] <- floor(intervalMeanSteps[as.character(imputed$hourInterval[i])])
+    #imputed$steps[i] <- 0
+}
+
+impTotalSteps <- tapply(imputed$steps, imputed$date, sum, na.rm = FALSE)
+impMeanSteps <- mean(impTotalSteps)
+impMedianSteps <- median(impTotalSteps)
+
+hist(impTotalSteps,
+     main = "Histogram of Total Steps per Day, with Imputed Values",
+     xlab = "total steps",
+     breaks = seq(0, 25000, 2500))
+```
+
+There are `r sum(is.na(imputed$steps))` NA values for steps.  
+Mean number of steps per day with imputation: `r impMeanSteps`  
+Median number of steps per day with imputation: `r impMedianSteps`
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r weekdays}
+library(reshape2)
+library(lattice)
+
+imputed$weekday <- factor(weekdays(imputed$date, abbreviate = TRUE))
+levels(imputed$weekday) <- list("weekday" = c("Mon", "Tue", "Wed", "Thu", "Fri"), "weekend" = c("Sat", "Sun"))
+
+melted <- melt(imputed, id.vars = c("hourInterval", "weekday"), measure.vars = "steps")
+totalSteps <- dcast(melted, hourInterval + weekday ~ variable, mean)
+
+stepsPlot <- xyplot(steps ~ hourInterval | weekday, totalSteps,
+                    type = "l",
+                    layout = c(1, 2),
+                    xlab = "hour of the day",
+                    scales = list(
+                      x = list(at = seq(0, 24, 4))
+                    ))
+print(stepsPlot)
+```
+
